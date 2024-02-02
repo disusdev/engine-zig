@@ -7,8 +7,12 @@ Game Dev Resources
 
 https://github.com/zig-gamedev/zig-gamedev?tab=readme-ov-file
 
-https://github.com/zig-gamedev/zig-gamedev/tree/main/libs/zwin32
+
 https://github.com/zig-gamedev/zig-gamedev/tree/main/samples/minimal_d3d12
+
+https://github.com/zig-gamedev/zig-gamedev/tree/main/libs/zwin32
+
+https://github.com/zig-gamedev/zig-gamedev/tree/main/libs/zmath
 https://github.com/zig-gamedev/zig-gamedev/tree/main/libs/zmesh
 https://github.com/zig-gamedev/zig-gamedev/tree/main/libs/zphysics
 https://github.com/zig-gamedev/zig-gamedev/tree/main/libs/zjobs

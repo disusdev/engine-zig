@@ -1,5 +1,11 @@
 const std = @import("std");
 
+inline fn thisDir() []const u8 {
+    return comptime std.fs.path.dirname(@src().file) orelse ".";
+}
+
+const content_dir = "data/";
+
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -46,9 +52,20 @@ pub fn build(b: *std.Build) void {
     // Same as above for our GL module,
     // because we copied the GL code into the project
     // we instead just create the module inline
-    exe.root_module.addImport("gl", b.createModule(.{
+    const gl_module = b.createModule(.{
         .root_source_file = std.Build.LazyPath.relative("external/gl.zig")
-    }));
+    });
+    exe.root_module.addImport("gl", gl_module);
+
+    const shader_module = b.createModule(.{ .source_file = .{ .path = "libs/Shader.zig" }, .dependencies = &.{.{ .name = "gl", .module = gl_module }} });
+    exe.root_module.addImport("shaders", shader_module);
+
+    const install_content_step = b.addInstallDirectory(.{
+        .source_dir = thisDir() ++ "/" ++ content_dir,
+        .install_dir = .{ .custom = "" },
+        .install_subdir = "bin/" ++ content_dir,
+    });
+    exe.step.dependOn(&install_content_step.step);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
