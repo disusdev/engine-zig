@@ -1,5 +1,6 @@
 const std = @import("std");
 const zstbi = @import("zstbi");
+const zmath = @import("zmath");
 
 inline fn thisDir() []const u8 {
     return comptime std.fs.path.dirname(@src().file) orelse ".";
@@ -52,6 +53,12 @@ pub fn build(b: *std.Build) void {
 
     const zstbi_pkg = zstbi.package(b, target, optimize, .{});
     zstbi_pkg.link(exe);
+
+    const zmath_pkg = zmath.package(b, target, optimize, .{
+        .options = .{ .enable_cross_platform_determinism = true },
+    });
+
+    zmath_pkg.link(exe);
 
     // const zstbi_dep = b.dependency("zstbi", .{
     //     .target = target,

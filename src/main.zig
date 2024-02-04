@@ -4,6 +4,7 @@ const os = std.os;
 const assert = std.debug.assert;
 const glfw: type = @import("mach-glfw");
 const stb: type = @import("zstbi");
+const math: type = @import("zmath");
 const gl: type = @import("gl");
 const Shader: type = @import("shaders.zig");
 
@@ -242,6 +243,19 @@ pub fn main() !void
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, texture2);
     gl.bindVertexArray(VAO);
+
+    // Construction of the tranformation matrix
+    const rotZ = math.rotationZ(@floatCast(glfw.getTime()));
+    const scale = math.scaling(0.5, 0.5, 0.5);
+    const transformM = math.mul(rotZ, scale);
+    var transform: [16]f32 = undefined;
+    math.storeMat(&transform, transformM);
+
+    // Sending our transformation matrix to our vertex shader
+    const transformLoc = gl.getUniformLocation(shaderProgram.ID, "transform");
+    gl.uniformMatrix4fv(transformLoc, 1, gl.FALSE, &transform);
+
+
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, null);
 
     window.swapBuffers();
