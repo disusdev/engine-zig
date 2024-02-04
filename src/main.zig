@@ -106,25 +106,76 @@ pub fn main() !void
 
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
-  const vertices = [_]f32 {
-  //|vertex         |uv       |color
-     0.5,  0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, // top right
-     0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, // bottom right
+  const vertices_2D = [_]f32{
+    // positions      // colors        // texture coords
+    0.5, 0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, // top right
+    0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, // bottom right
     -0.5, -0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, // bottom left
-    -0.5,  0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, // top left
+    -0.5, 0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, // top left
   };
 
+  _ = vertices_2D;
 
-  const indices = [6]u32 {
-    // note that we start from 0!
-    0, 1, 3, // first triangle
-    1, 2, 3, // second triangle
+  const vertices_3D = [_]f32{
+    -0.5, -0.5, -0.5, 0.0, 0.0,
+    0.5,  -0.5, -0.5, 1.0, 0.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0,
+    -0.5, 0.5,  -0.5, 0.0, 1.0,
+    -0.5, -0.5, -0.5, 0.0, 0.0,
+
+    -0.5, -0.5, 0.5,  0.0, 0.0,
+    0.5,  -0.5, 0.5,  1.0, 0.0,
+    0.5,  0.5,  0.5,  1.0, 1.0,
+    0.5,  0.5,  0.5,  1.0, 1.0,
+    -0.5, 0.5,  0.5,  0.0, 1.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0,
+
+    -0.5, 0.5,  0.5,  1.0, 0.0,
+    -0.5, 0.5,  -0.5, 1.0, 1.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0,
+    -0.5, 0.5,  0.5,  1.0, 0.0,
+
+    0.5,  0.5,  0.5,  1.0, 0.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0,
+    0.5,  -0.5, -0.5, 0.0, 1.0,
+    0.5,  -0.5, -0.5, 0.0, 1.0,
+    0.5,  -0.5, 0.5,  0.0, 0.0,
+    0.5,  0.5,  0.5,  1.0, 0.0,
+
+    -0.5, -0.5, -0.5, 0.0, 1.0,
+    0.5,  -0.5, -0.5, 1.0, 1.0,
+    0.5,  -0.5, 0.5,  1.0, 0.0,
+    0.5,  -0.5, 0.5,  1.0, 0.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0,
+
+    -0.5, 0.5,  -0.5, 0.0, 1.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0,
+    0.5,  0.5,  0.5,  1.0, 0.0,
+    0.5,  0.5,  0.5,  1.0, 0.0,
+    -0.5, 0.5,  0.5,  0.0, 0.0,
+    -0.5, 0.5,  -0.5, 0.0, 1.0,
+  };
+
+  const cube_positions = [_][3]f32{
+    .{ 0.0, 0.0, 0.0 },
+    .{ 2.0, 5.0, -15.0 },
+    .{ -1.5, -2.2, -2.5 },
+    .{ -3.8, -2.0, -12.3 },
+    .{ 2.4, -0.4, -3.5 },
+    .{ -1.7, 3.0, -7.5 },
+    .{ 1.3, -2.0, -2.5 },
+    .{ 1.5, 2.0, -2.5 },
+    .{ 1.5, 0.2, -1.5 },
+    .{ -1.3, 1.0, -1.5 },
   };
 
 
   var VBO: c_uint = undefined;
   var VAO: c_uint = undefined;
-  var EBO: c_uint = undefined;
 
   gl.genVertexArrays(1, &VAO);
   defer gl.deleteVertexArrays(1, &VAO);
@@ -132,31 +183,20 @@ pub fn main() !void
   gl.genBuffers(1, &VBO);
   defer gl.deleteBuffers(1, &VBO);
 
-  gl.genBuffers(1, &EBO);
-  defer gl.deleteBuffers(1, &EBO);
-
   // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
   gl.bindVertexArray(VAO);
   gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
   // Fill our buffer with the vertex data
-  gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * vertices.len, &vertices, gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * vertices_3D.len, &vertices_3D, gl.STATIC_DRAW);
 
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
-  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(u32) * indices.len, &indices, gl.STATIC_DRAW);
-
-  // Specify and link our vertext attribute description
-  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), null);
+  // vertex
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), null);
   gl.enableVertexAttribArray(0);
 
-  // colors
-  const col_offset: [*c]c_uint = (3 * @sizeOf(f32));
-  gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), col_offset);
-  gl.enableVertexAttribArray(1);
-
   // texture coords
-  const tex_offset: [*c]c_uint = (6 * @sizeOf(f32));
-  gl.vertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), tex_offset);
-  gl.enableVertexAttribArray(2);
+  const tex_offset: [*c]c_uint = (3 * @sizeOf(f32));
+  gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), tex_offset);
+  gl.enableVertexAttribArray(1);
 
   // zstbi: loading an image.
   stb.init(allocator);
@@ -164,18 +204,12 @@ pub fn main() !void
 
   var image1 = try stb.Image.loadFromFile("data/textures/container.jpg", 0);
   defer image1.deinit();
-  std.debug.print(
-    "\nImage 1 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n",
-    .{ image1.width, image1.height, image1.num_components },
-  );
+  std.debug.print("\nImage 1 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n", .{ image1.width, image1.height, image1.num_components });
 
   stb.setFlipVerticallyOnLoad(true);
   var image2 = try stb.Image.loadFromFile("data/textures/awesomeface.png", 0);
   defer image2.deinit();
-  std.debug.print(
-    "\nImage 2 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n",
-    .{ image2.width, image2.height, image2.num_components },
-  );
+  std.debug.print("\nImage 2 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n", .{ image2.width, image2.height, image2.num_components });
 
   // Create and bind texture1 resource
   var texture1: c_uint = undefined;
@@ -191,7 +225,7 @@ pub fn main() !void
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-  // Generate the texture1
+    // Generate the texture1
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image1.width), @intCast(image1.height), 0, gl.RGB, gl.UNSIGNED_BYTE, @ptrCast(image1.data));
   gl.generateMipmap(gl.TEXTURE_2D);
 
@@ -213,23 +247,28 @@ pub fn main() !void
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image2.width), @intCast(image2.height), 0, gl.RGBA, gl.UNSIGNED_BYTE, @ptrCast(image2.data));
   gl.generateMipmap(gl.TEXTURE_2D);
 
-
-  // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
-  gl.bindBuffer(gl.ARRAY_BUFFER, 0);
-
-  // You can unbind the VAO afterwards so other VAO calls won't accidentally modify this VAO, but this rarely happens. Modifying other
-  // VAOs requires a call to glBindVertexArray anyways so we generally don't unbind VAOs (nor VBOs) when it's not directly necessary.
-  gl.bindVertexArray(0);
-
-  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, 0);
-
-
-  // Wireframe mode
-  // gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+  // Enable OpenGL depth testing (use Z-buffer information)
+  gl.enable(gl.DEPTH_TEST);
 
   shaderProgram.use();
   shaderProgram.setInt("texture1", 0);
   shaderProgram.setInt("texture2", 1);
+
+  // Create the transformation matrices:
+  // Degree to radians conversion factor
+  const rad_conversion = std.math.pi / 180.0;
+
+  // Buffer to store Model matrix
+  var model: [16]f32 = undefined;
+
+  // View matrix
+  const viewM = math.translation(0.0, 0.0, -5.0);
+  var view: [16]f32 = undefined;
+  math.storeMat(&view, viewM);
+  shaderProgram.setMat4f("view", view);
+
+  // Buffer to store Orojection matrix (in render loop)
+  var proj: [16]f32 = undefined;
 
   // Wait for the user to close the window.
   while (!window.shouldClose())
@@ -237,26 +276,36 @@ pub fn main() !void
     glfw.pollEvents();
 
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture1);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, texture2);
     gl.bindVertexArray(VAO);
 
-    // Construction of the tranformation matrix
-    const rotZ = math.rotationZ(@floatCast(glfw.getTime()));
-    const scale = math.scaling(0.5, 0.5, 0.5);
-    const transformM = math.mul(rotZ, scale);
-    var transform: [16]f32 = undefined;
-    math.storeMat(&transform, transformM);
+    // Projection matrix
+    const projM = x: {
+      const window_size = window.getSize();
+      const fov: f32 = @as(f32, @floatFromInt(window_size.width)) / @as(f32, @floatFromInt(window_size.height));
+      const projM = math.perspectiveFovRhGl(45.0 * rad_conversion, fov, 0.1,100.0);
+      break :x projM;
+    };
+    math.storeMat(&proj, projM);
 
-    // Sending our transformation matrix to our vertex shader
-    const transformLoc = gl.getUniformLocation(shaderProgram.ID, "transform");
-    gl.uniformMatrix4fv(transformLoc, 1, gl.FALSE, &transform);
+    shaderProgram.setMat4f("projection", proj);
 
-
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, null);
+    for (cube_positions, 0..) |cube_position, i| {
+      const cube_trans = math.translation(cube_position[0], cube_position[1], cube_position[2]);
+      const rotation_direction = (((@mod(@as(f32, @floatFromInt(i + 1)), 2.0)) * 2.0) - 1.0);
+      const cube_rot = math.matFromAxisAngle(
+        math.f32x4(1.0, 0.3, 0.5, 1.0),
+        @as(f32, @floatCast(glfw.getTime())) * 55.0 * rotation_direction * rad_conversion,
+      );
+      const modelM = math.mul(cube_rot, cube_trans);
+      math.storeMat(&model, modelM);
+      shaderProgram.setMat4f("model", model);
+      gl.drawArrays(gl.TRIANGLES, 0, 36);
+    }
 
     window.swapBuffers();
   }
