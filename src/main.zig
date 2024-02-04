@@ -7,6 +7,18 @@ const stb: type = @import("zstbi");
 const math: type = @import("zmath");
 const gl: type = @import("gl");
 const Shader: type = @import("shaders.zig");
+const Camera: type = @import("camera.zig");
+
+// Camera
+const camera_pos = math.loadArr3(.{ 0.0, 0.0, 5.0 });
+var lastX: f64 = 0.0;
+var lastY: f64 = 0.0;
+var first_mouse = true;
+var camera = Camera.camera(camera_pos);
+
+// Timing
+var delta_time: f32 = 0.0;
+var last_frame: f32 = 0.0;
 
 const WindowSize = struct
 {
@@ -176,12 +188,16 @@ pub fn main() !void
 
   var VBO: c_uint = undefined;
   var VAO: c_uint = undefined;
+  // var EBO: c_uint = undefined;
 
   gl.genVertexArrays(1, &VAO);
   defer gl.deleteVertexArrays(1, &VAO);
 
   gl.genBuffers(1, &VBO);
   defer gl.deleteBuffers(1, &VBO);
+
+  // gl.genBuffers(1, &EBO);
+  // defer gl.deleteBuffers(1, &EBO);
 
   // bind the Vertex Array Object first, then bind and set vertex buffer(s), and then configure vertex attributes(s).
   gl.bindVertexArray(VAO);
@@ -262,10 +278,7 @@ pub fn main() !void
   var model: [16]f32 = undefined;
 
   // View matrix
-  const viewM = math.translation(0.0, 0.0, -5.0);
   var view: [16]f32 = undefined;
-  math.storeMat(&view, viewM);
-  shaderProgram.setMat4f("view", view);
 
   // Buffer to store Orojection matrix (in render loop)
   var proj: [16]f32 = undefined;
@@ -275,6 +288,13 @@ pub fn main() !void
   {
     glfw.pollEvents();
 
+    // Time per frame
+    const current_frame = @as(f32, @floatCast(glfw.getTime()));
+    delta_time = current_frame - last_frame;
+    last_frame = current_frame;
+
+    processInput(window);
+
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     gl.activeTexture(gl.TEXTURE0);
@@ -283,18 +303,23 @@ pub fn main() !void
     gl.bindTexture(gl.TEXTURE_2D, texture2);
     gl.bindVertexArray(VAO);
 
-    // Projection matrix
+        // Projection matrix
     const projM = x: {
       const window_size = window.getSize();
-      const fov: f32 = @as(f32, @floatFromInt(window_size.width)) / @as(f32, @floatFromInt(window_size.height));
-      const projM = math.perspectiveFovRhGl(45.0 * rad_conversion, fov, 0.1,100.0);
+      const aspect: f32 = @as(f32, @floatFromInt(window_size.width)) / @as(f32, @floatFromInt(window_size.height));
+      const projM = math.perspectiveFovRhGl(camera.zoom * Camera.RAD2DEG, aspect, 0.1, 100.0);
       break :x projM;
     };
     math.storeMat(&proj, projM);
-
     shaderProgram.setMat4f("projection", proj);
 
+    // View matrix: Camera
+    const viewM = camera.getViewMatrix();
+    math.storeMat(&view, viewM);
+    shaderProgram.setMat4f("view", view);
+
     for (cube_positions, 0..) |cube_position, i| {
+      // Model matrix
       const cube_trans = math.translation(cube_position[0], cube_position[1], cube_position[2]);
       const rotation_direction = (((@mod(@as(f32, @floatFromInt(i + 1)), 2.0)) * 2.0) - 1.0);
       const cube_rot = math.matFromAxisAngle(
@@ -304,6 +329,7 @@ pub fn main() !void
       const modelM = math.mul(cube_rot, cube_trans);
       math.storeMat(&model, modelM);
       shaderProgram.setMat4f("model", model);
+
       gl.drawArrays(gl.TRIANGLES, 0, 36);
     }
 
@@ -335,6 +361,25 @@ fn keyCallback(window:glfw.Window, key:glfw.Key, scancode:i32, action:glfw.Actio
   if (key == glfw.Key.q and action == glfw.Action.press)
   {
     window.setShouldClose(true);
+  }
+}
+
+fn processInput(window: glfw.Window) void {
+  if (glfw.Window.getKey(window, glfw.Key.escape) == glfw.Action.press) {
+    _ = glfw.Window.setShouldClose(window, true);
+  }
+
+  if (glfw.Window.getKey(window, glfw.Key.w) == glfw.Action.press) {
+    camera.processKeyboard(Camera.CameraMovement.FORWARD, delta_time);
+  }
+  if (glfw.Window.getKey(window, glfw.Key.s) == glfw.Action.press) {
+    camera.processKeyboard(Camera.CameraMovement.BACKWARD, delta_time);
+  }
+  if (glfw.Window.getKey(window, glfw.Key.a) == glfw.Action.press) {
+    camera.processKeyboard(Camera.CameraMovement.LEFT, delta_time);
+  }
+  if (glfw.Window.getKey(window, glfw.Key.d) == glfw.Action.press) {
+    camera.processKeyboard(Camera.CameraMovement.RIGHT, delta_time);
   }
 }
 
