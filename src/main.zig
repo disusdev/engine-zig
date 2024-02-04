@@ -3,85 +3,9 @@ const print = std.debug.print;
 const os = std.os;
 const assert = std.debug.assert;
 const glfw: type = @import("mach-glfw");
+const stb: type = @import("zstbi");
 const gl: type = @import("gl");
-const Shader: type = @import("shaders");
-
-const vsSrc =
-  \\ #version 410 core
-  \\ layout (location = 0) in vec3 aPos;
-  \\ void main()
-  \\ {
-  \\   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-  \\ }
-;
-
-const fsSrc =
-  \\ #version 410 core
-  \\ out vec4 FragColor;
-  \\ void main() {
-  \\  FragColor = vec4(1.0, 0.5, 0.2, 1.0);   
-  \\ }
-;
-
-
-fn compile_shaders() c_uint {
-  // Create vertex shader
-  var vertexShader: c_uint = undefined;
-  vertexShader = gl.createShader(gl.VERTEX_SHADER);
-  defer gl.deleteShader(vertexShader);
-
-  gl.shaderSource(vertexShader, 1, @ptrCast(&vsSrc), 0);
-  gl.compileShader(vertexShader);
-
-  // Check if vertex shader was compiled successfully
-  var success: c_int = undefined;
-  var infoLog: [512]u8 = [_]u8{0} ** 512;
-
-  gl.getShaderiv(vertexShader, gl.COMPILE_STATUS, &success);
-
-  if (success == 0)
-  {
-    gl.getShaderInfoLog(vertexShader, 512, 0, &infoLog);
-    std.log.err("{s}", .{infoLog});
-  }
-
-  // Fragment shader
-  var fragmentShader: c_uint = undefined;
-  fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-  defer gl.deleteShader(fragmentShader);
-
-  gl.shaderSource(fragmentShader, 1, @ptrCast(&fsSrc), 0);
-  gl.compileShader(fragmentShader);
-
-  gl.getShaderiv(fragmentShader, gl.COMPILE_STATUS, &success);
-
-  if (success == 0)
-  {
-    gl.getShaderInfoLog(fragmentShader, 512, 0, &infoLog);
-    std.log.err("{s}", .{infoLog});
-  }
-
-  // create a program object
-  var shaderProgram: c_uint = undefined;
-  shaderProgram = gl.createProgram();
-  
-
-  // attach compiled shader objects to the program object and link
-  gl.attachShader(shaderProgram, vertexShader);
-  gl.attachShader(shaderProgram, fragmentShader);
-  gl.linkProgram(shaderProgram);
-
-  // check if shader linking was successfull
-  gl.getProgramiv(shaderProgram, gl.LINK_STATUS, &success);
-  if (success == 0)
-  {
-    gl.getProgramInfoLog(shaderProgram, 512, 0, &infoLog);
-    std.log.err("{s}", .{infoLog});
-  }
-
-  return shaderProgram;
-}
-
+const Shader: type = @import("shaders.zig");
 
 const WindowSize = struct
 {
@@ -174,20 +98,19 @@ pub fn main() !void
   const arena_allocator = arena_allocator_state.allocator();
 
   // create shader program
-  const shaderProgram: Shader = Shader.create(arena_allocator, "shaders/shader_ex3.vs", "shaders/shader_ex3.fs");
+  const shaderProgram: Shader = Shader.create(arena_allocator, "data/shaders/shader.vs", "data/shaders/shader.fs");
 
   // const shaderProgram = compile_shaders();
-  defer gl.deleteProgram(shaderProgram);
-
-  std.log.info("size: {}", .{@sizeOf(u32)});
+  defer gl.deleteProgram(shaderProgram.ID);
 
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
-  const vertices = [12]f32 {
-    0.5, 0.5, 0.0, // top right
-    0.5, -0.5, 0.0, // bottom right
-    -0.5, -0.5, 0.0, // bottom left
-    -0.5, 0.5, 0.0, // top left
+  const vertices = [_]f32 {
+  //|vertex         |uv       |color
+     0.5,  0.5, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, // top right
+     0.5, -0.5, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, // bottom right
+    -0.5, -0.5, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, // bottom left
+    -0.5,  0.5, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, // top left
   };
 
 
@@ -221,8 +144,73 @@ pub fn main() !void
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, @sizeOf(u32) * indices.len, &indices, gl.STATIC_DRAW);
 
   // Specify and link our vertext attribute description
-  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 3 * @sizeOf(f32), null);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), null);
   gl.enableVertexAttribArray(0);
+
+  // colors
+  const col_offset: [*c]c_uint = (3 * @sizeOf(f32));
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), col_offset);
+  gl.enableVertexAttribArray(1);
+
+  // texture coords
+  const tex_offset: [*c]c_uint = (6 * @sizeOf(f32));
+  gl.vertexAttribPointer(2, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), tex_offset);
+  gl.enableVertexAttribArray(2);
+
+  // zstbi: loading an image.
+  stb.init(allocator);
+  defer stb.deinit();
+
+  var image1 = try stb.Image.loadFromFile("data/textures/container.jpg", 0);
+  defer image1.deinit();
+  std.debug.print(
+    "\nImage 1 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n",
+    .{ image1.width, image1.height, image1.num_components },
+  );
+
+  stb.setFlipVerticallyOnLoad(true);
+  var image2 = try stb.Image.loadFromFile("data/textures/awesomeface.png", 0);
+  defer image2.deinit();
+  std.debug.print(
+    "\nImage 2 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n",
+    .{ image2.width, image2.height, image2.num_components },
+  );
+
+  // Create and bind texture1 resource
+  var texture1: c_uint = undefined;
+
+  gl.genTextures(1, &texture1);
+  gl.activeTexture(gl.TEXTURE0); // activate the texture unit first before binding texture
+  gl.bindTexture(gl.TEXTURE_2D, texture1);
+
+  // set the texture1 wrapping parameters
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  // set texture1 filtering parameters
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  // Generate the texture1
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image1.width), @intCast(image1.height), 0, gl.RGB, gl.UNSIGNED_BYTE, @ptrCast(image1.data));
+  gl.generateMipmap(gl.TEXTURE_2D);
+
+  // Texture2
+  var texture2: c_uint = undefined;
+
+  gl.genTextures(1, &texture2);
+  gl.activeTexture(gl.TEXTURE1); // activate the texture unit first before binding texture
+  gl.bindTexture(gl.TEXTURE_2D, texture2);
+
+  // set the texture1 wrapping parameters
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  // set texture1 filtering parameters
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  // Generate the texture1
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image2.width), @intCast(image2.height), 0, gl.RGBA, gl.UNSIGNED_BYTE, @ptrCast(image2.data));
+  gl.generateMipmap(gl.TEXTURE_2D);
 
 
   // note that this is allowed, the call to glVertexAttribPointer registered VBO as the vertex attribute's bound vertex buffer object so afterwards we can safely unbind
@@ -236,22 +224,25 @@ pub fn main() !void
 
 
   // Wireframe mode
-  gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
+  // gl.polygonMode(gl.FRONT_AND_BACK, gl.LINE);
 
+  shaderProgram.use();
+  shaderProgram.setInt("texture1", 0);
+  shaderProgram.setInt("texture2", 1);
 
   // Wait for the user to close the window.
   while (!window.shouldClose())
   {
     glfw.pollEvents();
 
-    gl.clearColor(0.2, 0.3, 0.3, 1.0);
+    gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.useProgram(shaderProgram);
-    gl.bindVertexArray(VAO); // seeing as we only have a single VAO there's no need to bind it every time, but we'll do so to keethings a bit more organized
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, EBO);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, texture1);
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, texture2);
+    gl.bindVertexArray(VAO);
     gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, null);
-    gl.bindVertexArray(0);
 
     window.swapBuffers();
   }

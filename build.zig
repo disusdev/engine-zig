@@ -1,4 +1,5 @@
 const std = @import("std");
+const zstbi = @import("zstbi");
 
 inline fn thisDir() []const u8 {
     return comptime std.fs.path.dirname(@src().file) orelse ".";
@@ -49,28 +50,36 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("mach-glfw", glfw_dep.module("mach-glfw"));
     @import("mach_glfw").addPaths(exe);
 
+    const zstbi_pkg = zstbi.package(b, target, optimize, .{});
+    zstbi_pkg.link(exe);
+
+    // const zstbi_dep = b.dependency("zstbi", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // exe.root_module.addImport("zstbi", zstbi_dep.module("zstbi"));
+    // @import("zstbi").addPaths(exe);
+
     // Same as above for our GL module,
     // because we copied the GL code into the project
     // we instead just create the module inline
     const gl_module = b.createModule(.{
-        .root_source_file = std.Build.LazyPath.relative("external/gl.zig")
+        .root_source_file = std.Build.LazyPath.relative("./external/gl.zig")
     });
     exe.root_module.addImport("gl", gl_module);
-
-    const shader_module = b.createModule(.{ .source_file = .{ .path = "libs/Shader.zig" }, .dependencies = &.{.{ .name = "gl", .module = gl_module }} });
-    exe.root_module.addImport("shaders", shader_module);
-
-    const install_content_step = b.addInstallDirectory(.{
-        .source_dir = thisDir() ++ "/" ++ content_dir,
-        .install_dir = .{ .custom = "" },
-        .install_subdir = "bin/" ++ content_dir,
-    });
-    exe.step.dependOn(&install_content_step.step);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(exe);
+
+    const install_content_step = b.addInstallDirectory(.{
+        .source_dir = std.Build.LazyPath.relative(content_dir),
+        .install_dir = .{ .custom = "" },
+        .install_subdir = "bin/" ++ content_dir,
+    });
+    exe.step.dependOn(&install_content_step.step);
+
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
