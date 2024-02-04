@@ -98,6 +98,9 @@ pub fn main() !void
 
   window.setKeyCallback(keyCallback);
   window.setFramebufferSizeCallback(framebuffer_size_callback);
+  glfw.Window.setInputMode(window, glfw.Window.InputMode.cursor, glfw.Window.InputModeCursor.disabled);
+  glfw.Window.setCursorPosCallback(window, mouseCallback);
+  glfw.Window.setScrollCallback(window, mouseScrollCallback);
 
   glfw.makeContextCurrent(window);
 
@@ -382,6 +385,32 @@ fn processInput(window: glfw.Window) void {
     camera.processKeyboard(Camera.CameraMovement.RIGHT, delta_time);
   }
 }
+
+fn mouseCallback(window: glfw.Window, xpos: f64, ypos: f64) void {
+  _ = window;
+
+  if (first_mouse) {
+    lastX = xpos;
+    lastY = ypos;
+    first_mouse = false;
+  }
+
+  const xoffset = xpos - lastX;
+  const yoffset = ypos - lastY;
+
+  lastX = xpos;
+  lastY = ypos;
+
+  camera.processMouseMovement(xoffset, -yoffset, true);
+}
+
+fn mouseScrollCallback(window: glfw.Window, xoffset: f64, yoffset: f64) void {
+  _ = window;
+  _ = xoffset;
+
+  camera.processMouseScroll(yoffset);
+}
+
 
 test "simple test"
 {
