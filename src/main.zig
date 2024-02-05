@@ -6,8 +6,35 @@ const glfw: type = @import("mach-glfw");
 const stb: type = @import("zstbi");
 const math: type = @import("zmath");
 const gl: type = @import("gl");
+
 const Shader: type = @import("shaders.zig");
 const Camera: type = @import("camera.zig");
+
+pub fn create_texture(file_path:[:0]const u8) !c_uint {
+  var image = try stb.Image.loadFromFile(file_path, 0);
+  defer image.deinit();
+  std.debug.print("\nImage 1 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n", .{ image.width, image.height, image.num_components });
+
+  // Create and bind texture1 resource
+  var texture: c_uint = undefined;
+
+  gl.genTextures(1, &texture);
+  gl.activeTexture(gl.TEXTURE0); // activate the texture unit first before binding texture
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  // set the texture1 wrapping parameters
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+  // set texture1 filtering parameters
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  // Generate the texture1
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image.width), @intCast(image.height), 0, gl.RGB, gl.UNSIGNED_BYTE, @ptrCast(image.data));
+  gl.generateMipmap(gl.TEXTURE_2D);
+
+  return texture;
+}
 
 // Camera
 const camera_pos = math.loadArr3(.{ 0.0, 0.0, 5.0 });
@@ -19,6 +46,9 @@ var camera = Camera.camera(camera_pos);
 // Timing
 var delta_time: f32 = 0.0;
 var last_frame: f32 = 0.0;
+
+// lighting
+var light_position = [_]f32{ 10.0, 10.0, 10.0 };
 
 const WindowSize = struct
 {
@@ -113,11 +143,14 @@ pub fn main() !void
   defer arena_allocator_state.deinit();
   const arena_allocator = arena_allocator_state.allocator();
 
-  // create shader program
-  const shaderProgram: Shader = Shader.create(arena_allocator, "data/shaders/shader.vs", "data/shaders/shader.fs");
+  gl.enable(gl.DEPTH_TEST);
 
-  // const shaderProgram = compile_shaders();
-  defer gl.deleteProgram(shaderProgram.ID);
+  // create shader program
+  const shader_program: Shader = Shader.create(arena_allocator, "data/shaders/shader.vs", "data/shaders/shader.fs");
+  defer gl.deleteProgram(shader_program.ID);
+  const light_shader: Shader = Shader.create(arena_allocator, "data/shaders/light_shader.vs", "data/shaders/light_shader.fs");
+  defer gl.deleteProgram(light_shader.ID);
+
 
   // set up vertex data (and buffer(s)) and configure vertex attributes
   // ------------------------------------------------------------------
@@ -132,47 +165,47 @@ pub fn main() !void
   _ = vertices_2D;
 
   const vertices_3D = [_]f32{
-    -0.5, -0.5, -0.5, 0.0, 0.0,
-    0.5,  -0.5, -0.5, 1.0, 0.0,
-    0.5,  0.5,  -0.5, 1.0, 1.0,
-    0.5,  0.5,  -0.5, 1.0, 1.0,
-    -0.5, 0.5,  -0.5, 0.0, 1.0,
-    -0.5, -0.5, -0.5, 0.0, 0.0,
+    -0.5, -0.5, -0.5, 0.0, 0.0, 0.0,  0.0,  -1.0,
+    0.5,  -0.5, -0.5, 1.0, 0.0, 0.0,  0.0,  -1.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0, 0.0,  0.0,  -1.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0, 0.0,  0.0,  -1.0,
+    -0.5, 0.5,  -0.5, 0.0, 1.0, 0.0,  0.0,  -1.0,
+    -0.5, -0.5, -0.5, 0.0, 0.0, 0.0,  0.0,  -1.0,
 
-    -0.5, -0.5, 0.5,  0.0, 0.0,
-    0.5,  -0.5, 0.5,  1.0, 0.0,
-    0.5,  0.5,  0.5,  1.0, 1.0,
-    0.5,  0.5,  0.5,  1.0, 1.0,
-    -0.5, 0.5,  0.5,  0.0, 1.0,
-    -0.5, -0.5, 0.5,  0.0, 0.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0, 0.0,  0.0,  1.0,
+    0.5,  -0.5, 0.5,  1.0, 0.0, 0.0,  0.0,  1.0,
+    0.5,  0.5,  0.5,  1.0, 1.0, 0.0,  0.0,  1.0,
+    0.5,  0.5,  0.5,  1.0, 1.0, 0.0,  0.0,  1.0,
+    -0.5, 0.5,  0.5,  0.0, 1.0, 0.0,  0.0,  1.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0, 0.0,  0.0,  1.0,
 
-    -0.5, 0.5,  0.5,  1.0, 0.0,
-    -0.5, 0.5,  -0.5, 1.0, 1.0,
-    -0.5, -0.5, -0.5, 0.0, 1.0,
-    -0.5, -0.5, -0.5, 0.0, 1.0,
-    -0.5, -0.5, 0.5,  0.0, 0.0,
-    -0.5, 0.5,  0.5,  1.0, 0.0,
+    -0.5, 0.5,  0.5,  1.0, 0.0, -1.0, 0.0,  0.0,
+    -0.5, 0.5,  -0.5, 1.0, 1.0, -1.0, 0.0,  0.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0, -1.0, 0.0,  0.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0, -1.0, 0.0,  0.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0, -1.0, 0.0,  0.0,
+    -0.5, 0.5,  0.5,  1.0, 0.0, -1.0, 0.0,  0.0,
 
-    0.5,  0.5,  0.5,  1.0, 0.0,
-    0.5,  0.5,  -0.5, 1.0, 1.0,
-    0.5,  -0.5, -0.5, 0.0, 1.0,
-    0.5,  -0.5, -0.5, 0.0, 1.0,
-    0.5,  -0.5, 0.5,  0.0, 0.0,
-    0.5,  0.5,  0.5,  1.0, 0.0,
+    0.5,  0.5,  0.5,  1.0, 0.0, 1.0,  0.0,  0.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0, 1.0,  0.0,  0.0,
+    0.5,  -0.5, -0.5, 0.0, 1.0, 1.0,  0.0,  0.0,
+    0.5,  -0.5, -0.5, 0.0, 1.0, 1.0,  0.0,  0.0,
+    0.5,  -0.5, 0.5,  0.0, 0.0, 1.0,  0.0,  0.0,
+    0.5,  0.5,  0.5,  1.0, 0.0, 1.0,  0.0,  0.0,
 
-    -0.5, -0.5, -0.5, 0.0, 1.0,
-    0.5,  -0.5, -0.5, 1.0, 1.0,
-    0.5,  -0.5, 0.5,  1.0, 0.0,
-    0.5,  -0.5, 0.5,  1.0, 0.0,
-    -0.5, -0.5, 0.5,  0.0, 0.0,
-    -0.5, -0.5, -0.5, 0.0, 1.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0, 0.0,  -1.0, 0.0,
+    0.5,  -0.5, -0.5, 1.0, 1.0, 0.0,  -1.0, 0.0,
+    0.5,  -0.5, 0.5,  1.0, 0.0, 0.0,  -1.0, 0.0,
+    0.5,  -0.5, 0.5,  1.0, 0.0, 0.0,  -1.0, 0.0,
+    -0.5, -0.5, 0.5,  0.0, 0.0, 0.0,  -1.0, 0.0,
+    -0.5, -0.5, -0.5, 0.0, 1.0, 0.0,  -1.0, 0.0,
 
-    -0.5, 0.5,  -0.5, 0.0, 1.0,
-    0.5,  0.5,  -0.5, 1.0, 1.0,
-    0.5,  0.5,  0.5,  1.0, 0.0,
-    0.5,  0.5,  0.5,  1.0, 0.0,
-    -0.5, 0.5,  0.5,  0.0, 0.0,
-    -0.5, 0.5,  -0.5, 0.0, 1.0,
+    -0.5, 0.5,  -0.5, 0.0, 1.0, 0.0,  1.0,  0.0,
+    0.5,  0.5,  -0.5, 1.0, 1.0, 0.0,  1.0,  0.0,
+    0.5,  0.5,  0.5,  1.0, 0.0, 0.0,  1.0,  0.0,
+    0.5,  0.5,  0.5,  1.0, 0.0, 0.0,  1.0,  0.0,
+    -0.5, 0.5,  0.5,  0.0, 0.0, 0.0,  1.0,  0.0,
+    -0.5, 0.5,  -0.5, 0.0, 1.0, 0.0,  1.0,  0.0,
   };
 
   const cube_positions = [_][3]f32{
@@ -191,6 +224,7 @@ pub fn main() !void
 
   var VBO: c_uint = undefined;
   var VAO: c_uint = undefined;
+  var light_VAO: c_uint = undefined;
   // var EBO: c_uint = undefined;
 
   gl.genVertexArrays(1, &VAO);
@@ -198,6 +232,9 @@ pub fn main() !void
 
   gl.genBuffers(1, &VBO);
   defer gl.deleteBuffers(1, &VBO);
+
+  gl.genVertexArrays(1, &light_VAO);
+  defer gl.deleteVertexArrays(1, &light_VAO);
 
   // gl.genBuffers(1, &EBO);
   // defer gl.deleteBuffers(1, &EBO);
@@ -209,69 +246,38 @@ pub fn main() !void
   gl.bufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * vertices_3D.len, &vertices_3D, gl.STATIC_DRAW);
 
   // vertex
-  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), null);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), null);
   gl.enableVertexAttribArray(0);
 
   // texture coords
   const tex_offset: [*c]c_uint = (3 * @sizeOf(f32));
-  gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 5 * @sizeOf(f32), tex_offset);
+  gl.vertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), tex_offset);
   gl.enableVertexAttribArray(1);
+
+  // normal attribute
+  const normal_offset: [*c]c_uint = (5 * @sizeOf(f32));
+  gl.vertexAttribPointer(2, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), normal_offset);
+  gl.enableVertexAttribArray(2);
+
+  // Configure light VAO
+  gl.bindVertexArray(light_VAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, VBO);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, gl.FALSE, 8 * @sizeOf(f32), null);
+  gl.enableVertexAttribArray(0);
 
   // zstbi: loading an image.
   stb.init(allocator);
   defer stb.deinit();
 
-  var image1 = try stb.Image.loadFromFile("data/textures/container.jpg", 0);
-  defer image1.deinit();
-  std.debug.print("\nImage 1 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n", .{ image1.width, image1.height, image1.num_components });
-
-  stb.setFlipVerticallyOnLoad(true);
-  var image2 = try stb.Image.loadFromFile("data/textures/awesomeface.png", 0);
-  defer image2.deinit();
-  std.debug.print("\nImage 2 info:\n\n  img width: {any}\n  img height: {any}\n  nchannels: {any}\n", .{ image2.width, image2.height, image2.num_components });
-
-  // Create and bind texture1 resource
-  var texture1: c_uint = undefined;
-
-  gl.genTextures(1, &texture1);
-  gl.activeTexture(gl.TEXTURE0); // activate the texture unit first before binding texture
-  gl.bindTexture(gl.TEXTURE_2D, texture1);
-
-  // set the texture1 wrapping parameters
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-  // set texture1 filtering parameters
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    // Generate the texture1
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image1.width), @intCast(image1.height), 0, gl.RGB, gl.UNSIGNED_BYTE, @ptrCast(image1.data));
-  gl.generateMipmap(gl.TEXTURE_2D);
-
-  // Texture2
-  var texture2: c_uint = undefined;
-
-  gl.genTextures(1, &texture2);
-  gl.activeTexture(gl.TEXTURE1); // activate the texture unit first before binding texture
-  gl.bindTexture(gl.TEXTURE_2D, texture2);
-
-  // set the texture1 wrapping parameters
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); // set texture wrapping to GL_REPEAT (default wrapping method)
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
-  // set texture1 filtering parameters
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-  // Generate the texture1
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, @intCast(image2.width), @intCast(image2.height), 0, gl.RGBA, gl.UNSIGNED_BYTE, @ptrCast(image2.data));
-  gl.generateMipmap(gl.TEXTURE_2D);
+  const texture1: c_uint = try create_texture("data/textures/container.jpg");
+  const texture2: c_uint = try create_texture("data/textures/awesomeface.png");
 
   // Enable OpenGL depth testing (use Z-buffer information)
   gl.enable(gl.DEPTH_TEST);
 
-  shaderProgram.use();
-  shaderProgram.setInt("texture1", 0);
-  shaderProgram.setInt("texture2", 1);
+  shader_program.use();
+  shader_program.setInt("texture1", 0);
+  shader_program.setInt("texture2", 1);
 
   // Create the transformation matrices:
   // Degree to radians conversion factor
@@ -285,6 +291,8 @@ pub fn main() !void
 
   // Buffer to store Orojection matrix (in render loop)
   var proj: [16]f32 = undefined;
+
+  var light_model: [16]f32 = undefined;
 
   // Wait for the user to close the window.
   while (!window.shouldClose())
@@ -300,13 +308,23 @@ pub fn main() !void
 
     gl.clearColor(0.0, 0.0, 0.0, 0.0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    light_position[0] = 1.0 + math.sin(@as(f32, @floatCast(glfw.getTime()))) * 2.0;
+    light_position[1] = 1.0 + math.sin(@as(f32, @floatCast(glfw.getTime())) / 2.0) * 1.0;
+
+    shader_program.use();
+    shader_program.setVec3f("objectColor", .{ 1.0, 1.0, 1.0 });
+    shader_program.setVec3f("lightColor", .{ 1.0, 1.0, 1.0 });
+    shader_program.setVec3f("lightPos", light_position);
+    shader_program.setVec3f("viewPos", math.vecToArr3(camera.position));
+
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture1);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, texture2);
     gl.bindVertexArray(VAO);
 
-        // Projection matrix
+    // Projection matrix
     const projM = x: {
       const window_size = window.getSize();
       const aspect: f32 = @as(f32, @floatFromInt(window_size.width)) / @as(f32, @floatFromInt(window_size.height));
@@ -314,12 +332,12 @@ pub fn main() !void
       break :x projM;
     };
     math.storeMat(&proj, projM);
-    shaderProgram.setMat4f("projection", proj);
+    shader_program.setMat4f("projection", proj);
 
     // View matrix: Camera
     const viewM = camera.getViewMatrix();
     math.storeMat(&view, viewM);
-    shaderProgram.setMat4f("view", view);
+    shader_program.setMat4f("view", view);
 
     for (cube_positions, 0..) |cube_position, i| {
       // Model matrix
@@ -331,10 +349,21 @@ pub fn main() !void
       );
       const modelM = math.mul(cube_rot, cube_trans);
       math.storeMat(&model, modelM);
-      shaderProgram.setMat4f("model", model);
+      shader_program.setMat4f("model", model);
 
       gl.drawArrays(gl.TRIANGLES, 0, 36);
     }
+
+    const light_trans = math.translation(light_position[0], light_position[1], light_position[2]);
+    const light_modelM = math.mul(light_trans, math.scaling(0.2, 0.2, 0.2));
+    math.storeMat(&light_model, light_modelM);
+
+    light_shader.use();
+    light_shader.setMat4f("projection", proj);
+    light_shader.setMat4f("view", view);
+    light_shader.setMat4f("model", light_model);
+    gl.bindVertexArray(light_VAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 36);
 
     window.swapBuffers();
   }
